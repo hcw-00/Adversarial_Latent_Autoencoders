@@ -7,7 +7,7 @@ from dataset.mnist import load_mnist
 import numpy as np
 import pandas as pd
 from collections import namedtuple
-
+from sklearn.utils import shuffle
 from module import *
 from utils import *
 import utils
@@ -34,27 +34,20 @@ class vae(object):
         self.saver = tf.train.Saver(max_to_keep=100)
         
         if args.phase == 'train':
-            (train_image_data, train_label_data), (test_image_data, test_label_data) = load_mnist(flatten = False, normalize = False)
+            (self.train_image, self.train_label), (self.test_image, self.test_label) = load_mnist(flatten = False, normalize = False)
         else:
             print('_')
         
-    def _load_batch(self, dataset, idx):
-        
-        filename_list = dataset.iloc[:,0][idx * self.batch_size:(idx + 1) * self.batch_size].values.tolist()
+    def _load_batch(self, idx):
 
-        # input batch (2d binary image)
         input_batch = []
-        for i in range(len(filename_list)):
-            temp_img = cv2.imread('./dataset/rcwa_data_0608/64/'+filename_list[i], 0)
-            temp_img = temp_img/128 - 1
-            input_batch.append(list(temp_img))
+        target_batch = []
+        for i in range(self.batch_size):
+            input_batch.append(np.squeeze(self.train_image[i+self.batch_size*idx]))
+            target_batch.append(self.train_label[i+self.batch_size*idx])
         input_batch = np.expand_dims(input_batch, axis=3)
 
-        # target batch (spectrum)
-        target_batch = np.expand_dims(dataset.iloc[:,6:][idx * self.batch_size:(idx + 1) * self.batch_size].values.tolist(), 2) # [0.543, ... ] 226개
-        target_batch = target_batch/180
-
-        return input_batch, target_batch, filename_list
+        return input_batch, target_batch
 
 
     def _build_model(self, args):
@@ -119,13 +112,13 @@ class vae(object):
 
         for epoch in range(args.epoch):
             
-            batch_idxs = len(self.ds) // self.batch_size
+            batch_idxs = len(self.train_label) // self.batch_size
 
-            #ds_1 = self.ds.sample(frac=1)
+            self.train_image, self.train_label = shuffle(self.train_image, self.train_label)
             
             for idx in range(0, batch_idxs):
 
-                input_batch, target_batch, _ = self._load_batch(self.ds, idx)
+                input_batch, target_batch = self._load_batch(idx)
 
                 z_input = np.random.normal(0,1,[self.batch_size,512])
 
