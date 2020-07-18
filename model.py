@@ -49,10 +49,10 @@ class alae_mlp(object):
 
         self.real_input = tf.placeholder(tf.float32, [None,784], name='input')
         self.z_input = tf.placeholder(tf.float32, [None,128], name='z_input')
+        self.latent = tf.placeholder(tf.float32, [None,50], name='latent_vector')
 
         #
         eta = tf.random.normal([1])
-        #z_input = tf.random_normal([512], 0, 1, dtype=tf.float32)
         w_F_fake = self.f_encoder(self.z_input, reuse=False, name='f_encoder')
         self.fake_ = self.generator(w_F_fake, eta, reuse=False, name='generator')
         w_E_fake = self.e_encoder(self.fake_, reuse=False, name='e_encoder')
@@ -61,9 +61,10 @@ class alae_mlp(object):
         w_E_real = self.e_encoder(self.real_input, reuse=True, name='e_encoder')
         D_real = self.discriminator(w_E_real, reuse=True, name='discriminator')        
 
-        # inference network
-        w_test = self.e_encoder(self.real_input, reuse=True, name='e_encoder')
-        self.recon_image = self.generator(w_test, eta, reuse=True, name='generator')
+        # for inference
+        self.w_test = self.e_encoder(self.real_input, reuse=True, name='e_encoder')
+        self.recon_image = self.generator(self.w_test, eta, reuse=True, name='generator')
+        self.gen_from_latent = self.generator(self.latent, eta, reuse=True, name='generator')
 
         t_vars = tf.trainable_variables()
         self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
@@ -95,8 +96,9 @@ class alae_mlp(object):
         self.lr = args.lr
         
         global_step = tf.Variable(0, trainable=False)
-        #learning_rate = tf.train.exponential_decay(self.lr, global_step, args.epoch_step, 0.96, staircase=False)
-        learning_rate = self.lr
+        learning_rate = tf.constant(self.lr)
+        #learning_rate = tf.train.exponential_decay(self.lr, global_step, args.epoch_step, 0.98, staircase=False)
+        
 
         self.ED_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
             .minimize(self.ED_adv_loss, var_list=[self.e_vars, self.d_vars], global_step = global_step)
@@ -131,14 +133,14 @@ class alae_mlp(object):
                 _, fg_loss, fake_img = self.sess.run([self.FG_optim, self.FG_adv_loss, self.fake_], feed_dict={self.z_input : z_input, self.real_input : input_batch})
                 # Update E, G
                 z_input = np.random.normal(0,1,[self.batch_size,128])
-                _, eg_loss = self.sess.run([self.EG_optim, self.EG_loss], feed_dict={self.z_input : z_input, self.real_input : input_batch})
+                _, eg_loss, lr = self.sess.run([self.EG_optim, self.EG_loss, learning_rate], feed_dict={self.z_input : z_input, self.real_input : input_batch})
 
                 #self.writer.add_summary(summary_str, counter)
 
                 counter += 1
                 if idx%20==0:
-                    print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f | G adv loss: %4.4f | latent l2 loss: %4.4f | time: %4.4f " % (
-                        epoch, idx, batch_idxs, ed_loss, fg_loss, eg_loss, time.time() - start_time)))
+                    print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f | G adv loss: %4.4f | latent l2 loss: %4.4f | lr: %4.6f | time: %4.2f " % (
+                        epoch, idx, batch_idxs, ed_loss, fg_loss, eg_loss, lr, time.time() - start_time)))
 
                 if idx == batch_idxs-1:
                     #self.save(args.checkpoint_dir, counter)
@@ -175,7 +177,7 @@ class alae_mlp(object):
             print(ckpt_paths)
             ckpt_name = os.path.basename(ckpt_paths[-1])    #hcw # default [-1]
             #temp_ckpt = 'dnn.model-23401'
-            ckpt_name = os.path.basename(temp_ckpt)
+            #ckpt_name = os.path.basename(temp_ckpt)
             self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
             return True
         else:
@@ -195,12 +197,12 @@ class alae_mlp(object):
             print(" [!] Load failed...")
 
         counter = 0
-
+        self.test_image, self.test_label = shuffle(self.test_image, self.test_label)
         for epoch in range(1):
             
             batch_idxs = len(self.test_label) // self.batch_size
 
-            #self.train_image, self.train_label = shuffle(self.train_image, self.train_label)
+            latent_list = []
             
             for idx in range(1):
 
@@ -208,14 +210,30 @@ class alae_mlp(object):
 
                 z_input = np.random.normal(0,1,[self.batch_size,128])
 
-                recon_img = self.sess.run([self.recon_image], feed_dict={self.z_input : z_input, self.real_input : input_batch})
+                recon_img, w_latent = self.sess.run([self.recon_image, self.w_test], feed_dict={self.z_input : z_input, self.real_input : input_batch})
 
-                for j in range(len(recon_img[0])):
-                    temp_image = np.reshape(recon_img[0][j]*255, (28,28))
+                for j in range(4):
+                    temp_image = np.reshape(recon_img[j]*255, (28,28))
                     temp_real = np.reshape(input_batch[j]*255, (28,28))
                     cv2.imwrite('./test/'+str(j)+'_real.bmp', temp_real)
                     cv2.imwrite('./test/'+str(j)+'_recon.bmp', temp_image)
+                    latent_list.append(w_latent[j])
                 counter += 1
+
+        latent_step = (latent_list[3] - latent_list[2])/6
+        latent_concat = np.zeros([28, 28*7])
+        for i in range(7):
+            #self.gen_from_latent = self.generator(self.latent, eta, reuse=True, name='generator')
+            temp_latent = latent_list[2] + i*latent_step
+            temp_latent = np.expand_dims(temp_latent, axis=0)
+            temp_img = self.sess.run([self.gen_from_latent], feed_dict={self.latent: temp_latent})
+            latent_concat[:,i*28:(i+1)*28] = np.reshape(temp_img, (28,28))*255
+
+        cv2.imwrite('./test/latent_walk.bmp', latent_concat)
+
+        #self.gen_from_latent = self.generator(self.latent, eta, reuse=True, name='generator')
+        #for i in range(100):
+        #    for j in range(100):
 
 
             
