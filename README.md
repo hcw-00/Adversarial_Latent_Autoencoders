@@ -1,4 +1,4 @@
-# Adversarial_Latent_Autoencoders(unofficial version)
+# Adversarial Latent Autoencoders(ALAE, unofficial)
 Simple tensorflow(v1.x) implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al.  
 Original paper : https://arxiv.org/abs/2004.04467  
 
