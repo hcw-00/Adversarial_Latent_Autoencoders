@@ -14,7 +14,10 @@ import utils
 
 import cv2
 
+#TODO : add noise input eta
+
 class vae(object):
+    
     def __init__(self, sess, args):
         self.sess = sess
         self.batch_size = args.batch_size
@@ -22,7 +25,7 @@ class vae(object):
         self.L1_lambda = args.L1_lambda
         self.dataset_dir = args.dataset_dir
         self.alpha = args.alpha
-
+        self.gamma = 10
         self.f_encoder = f_encoder
         self.generator = generator
         self.e_encoder = e_encoder
@@ -33,67 +36,79 @@ class vae(object):
         
         self.saver = tf.train.Saver(max_to_keep=100)
         
-        if args.phase == 'train':
-            (self.train_image, self.train_label), (self.test_image, self.test_label) = load_mnist(flatten = False, normalize = False)
-        else:
-            print('_')
         
-    def _load_batch(self, idx):
+        (self.train_image, self.train_label), (self.test_image, self.test_label) = load_mnist(flatten = True, normalize = True)
+
+    def _load_batch(self, idx, images):
 
         input_batch = []
-        target_batch = []
+        #target_batch = []
         for i in range(self.batch_size):
-            input_batch.append(np.squeeze(self.train_image[i+self.batch_size*idx]))
-            target_batch.append(self.train_label[i+self.batch_size*idx])
-        input_batch = np.expand_dims(input_batch, axis=3)
+            input_batch.append(np.squeeze(images[i+self.batch_size*idx]))
+            #target_batch.append(self.train_label[i+self.batch_size*idx])
+        #input_batch = np.expand_dims(input_batch, axis=3)
 
-        return input_batch, target_batch
+        return input_batch#, target_batch
 
 
     def _build_model(self, args):
 
-        self.real_input = tf.placeholder(tf.float32, [None,28,28,1], name='input')
-        self.z_input = tf.placeholder(tf.float32, [None,512], name='z_input')
+        self.real_input = tf.placeholder(tf.float32, [None,784], name='input')
+        self.z_input = tf.placeholder(tf.float32, [None,128], name='z_input')
 
         #
+        eta = tf.random.normal([1])
         #z_input = tf.random_normal([512], 0, 1, dtype=tf.float32)
         w_F_fake = self.f_encoder(self.z_input, reuse=False, name='f_encoder')
-        fake_ = self.generator(w_f_fake, eta, reuse=False, name='generator')
-        w_E_fake = self.e_encoder(fake_, reuse=False, name='e_encoder')
-        D_fake = self.discriminator(w_e_fake, reuse=False, name='discriminator')
+        self.fake_ = self.generator(w_F_fake, eta, reuse=False, name='generator')
+        w_E_fake = self.e_encoder(self.fake_, reuse=False, name='e_encoder')
+        D_fake = self.discriminator(w_E_fake, reuse=False, name='discriminator')
 
         w_E_real = self.e_encoder(self.real_input, reuse=True, name='e_encoder')
-        D_real = self.discriminator(w_e_real, reuse=True, name='discriminator')
+        D_real = self.discriminator(w_E_real, reuse=True, name='discriminator')        
 
-        # losses
-        self.ED_adv_loss = softplus(D_fake) + softplus(-D_real) # + "Gradient regularization term"
-        self.FG_adv_loss = softplus(-D_fake)
-        self.EG_loss = mse_criterion(w_F_fake, w_E_real)
-        
-
-        self.loss_summary = tf.summary.scalar("loss", self.total_loss)
+        # inference network
+        w_test = self.e_encoder(self.real_input, reuse=True, name='e_encoder')
+        self.recon_image = self.generator(w_test, eta, reuse=True, name='generator')
 
         t_vars = tf.trainable_variables()
-        self.d_vars = [var for var in t_vars if 'discriminator' in var]
-        self.g_vars = [var for var in t_vars if 'generator' in var]
-        self.e_vars = [var for var in t_vars if 'e_encoder' in var]
-        self.f_vars = [var for var in t_vars if 'f_encoder' in var]
+        self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
+        self.g_vars = [var for var in t_vars if 'generator' in var.name]
+        self.e_vars = [var for var in t_vars if 'e_encoder' in var.name]
+        self.f_vars = [var for var in t_vars if 'f_encoder' in var.name]
         print("trainable variables : ")
         print(t_vars)
+
+        # losses
+        # dc_dw, dc_db = tf.gradients(cost, [W, b])
+        self.D_real_loss = tf.reduce_mean(softplus(-D_real))
+        self.D_fake_loss = tf.reduce_mean(softplus(D_fake))
+        self.D_grad_loss = self.grad_reg(self.D_real_loss, self.e_vars+self.d_vars) # gradient regularization term
+        self.ED_adv_loss = self.D_fake_loss + self.D_real_loss #+ self.D_grad_loss
+        self.FG_adv_loss = tf.reduce_mean(softplus(-D_fake))
+        self.EG_loss = mse_criterion(w_F_fake, w_E_fake)
+
+        self.loss_summary = tf.summary.scalar("loss", self.ED_adv_loss)
         
+    def grad_reg(self, t, vars):
+        grad = tf.gradients(t, vars)
+        gradreg = self.gamma/2 * tf.reduce_mean([tf.reduce_mean(tf.square(g)) for g in grad])
+        return gradreg
 
     def train(self, args):
         
-        self.lr = tf.placeholder(tf.float32, None, name='learning_rate')
+        #self.lr = tf.placeholder(tf.float32, None, name='learning_rate')
+        self.lr = args.lr
         
         global_step = tf.Variable(0, trainable=False)
-        learning_rate = tf.train.exponential_decay(self.lr, global_step, args.epoch_step, 0.96, staircase=False)
+        #learning_rate = tf.train.exponential_decay(self.lr, global_step, args.epoch_step, 0.96, staircase=False)
+        learning_rate = self.lr
 
-        self.ED_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1) \
+        self.ED_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
             .minimize(self.ED_adv_loss, var_list=[self.e_vars, self.d_vars], global_step = global_step)
-        self.FG_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1) \
+        self.FG_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
             .minimize(self.FG_adv_loss, var_list=[self.f_vars, self.g_vars], global_step = global_step)
-        self.EG_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1) \
+        self.EG_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
             .minimize(self.EG_loss, var_list=[self.e_vars, self.g_vars], global_step = global_step)
 
         print("initialize")
@@ -118,25 +133,31 @@ class vae(object):
             
             for idx in range(0, batch_idxs):
 
-                input_batch, target_batch = self._load_batch(idx)
-
-                z_input = np.random.normal(0,1,[self.batch_size,512])
-
                 # Update E, D
-                _ = self.sess.run([self.ED_optim], feed_dict={self.z_input : z_input, self.input : input_batch})
+                input_batch = self._load_batch(idx, self.train_image)
+                z_input = np.random.normal(0,1,[self.batch_size,128])
+                _, ed_loss = self.sess.run([self.ED_optim, self.ED_adv_loss], feed_dict={self.z_input : z_input, self.real_input : input_batch})
                 # Update F, G
-                _ = self.sess.run([self.FG_optim], feed_dict={self.z_input : z_input, self.input : input_batch})
+                z_input = np.random.normal(0,1,[self.batch_size,128])
+                _, fg_loss, fake_img = self.sess.run([self.FG_optim, self.FG_adv_loss, self.fake_], feed_dict={self.z_input : z_input, self.real_input : input_batch})
                 # Update E, G
-                _ = self.sess.run([self.EG_optim], feed_dict={self.z_input : z_input, self.input : input_batch})
+                z_input = np.random.normal(0,1,[self.batch_size,128])
+                _, eg_loss = self.sess.run([self.EG_optim, self.EG_loss], feed_dict={self.z_input : z_input, self.real_input : input_batch})
 
-                self.writer.add_summary(summary_str, counter)
+                #self.writer.add_summary(summary_str, counter)
 
                 counter += 1
-                if idx%10==0:
-                    print(("Epoch: [%2d] [%4d/%4d] time: %4.4f loss: %4.4f loss_l: %4.4f loss_r: %4.4f lr: %4.7f kl: %4.7f m: %4.7f" % (
-                        epoch, idx, batch_idxs, time.time() - start_time, loss,loss_l,loss_r, c_lr, np.mean(kl), np.mean(marginal))))
+                if idx%20==0:
+                    print(("Epoch: [%2d] [%4d/%4d] time: %4.4f ed adv loss: %4.4f fg adv loss: %4.4f eg loss: %4.4f" % (
+                        epoch, idx, batch_idxs, time.time() - start_time, ed_loss, fg_loss, eg_loss)))
 
-                if np.mod(counter, args.save_freq) == 20:
+                if idx == batch_idxs-1:
+                    #self.save(args.checkpoint_dir, counter)
+                    temp_fake = np.reshape(fake_img[0]*255, (28,28))
+                    #temp_recon = np.reshape(input_batch[j]*255, (28,28))
+                    cv2.imwrite('./sample/fake_'+str(epoch)+'.bmp', temp_fake)
+                    #cv2.imwrite('./test/recon_'+str(j)+'.bmp', temp_image)
+                if epoch == args.epoch-1 and idx == batch_idxs-1:
                     self.save(args.checkpoint_dir, counter)
 
 
@@ -164,7 +185,7 @@ class vae(object):
             ckpt_paths = ckpt.all_model_checkpoint_paths    #hcw
             print(ckpt_paths)
             #ckpt_name = os.path.basename(ckpt_paths[-1])    #hcw # default [-1]
-            temp_ckpt = 'dnn.model-80520'
+            temp_ckpt = 'dnn.model-23401'
             ckpt_name = os.path.basename(temp_ckpt)
             self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
             return True
@@ -174,6 +195,7 @@ class vae(object):
 
     def test(self, args):
 
+        
         start_time = time.time()
         init_op = tf.global_variables_initializer()
         self.sess.run(init_op)
@@ -185,103 +207,26 @@ class vae(object):
 
         counter = 0
 
-
-        if not os.path.exists(os.path.join(args.test_dir,'input')):
-            os.mkdir(os.path.join(args.test_dir,'input'))
-
-
-        batch_idxs = len(self.ds) // self.batch_size
-
-        #ds_1 = self.ds.sample(frac=1)
-        ds_1 = self.ds
-        #print(ds_1.iloc[:,4:][0:10].values.tolist())
-        
-        loss_list = []
-
-        df_param_target_all = pd.DataFrame()
-        df_param_pred_all = pd.DataFrame()
-
-        for idx in range(0, batch_idxs):
-
-            input_batch, target_batch, _ = self._load_batch(ds_1, idx)
-
-            geo_pred, pred, loss = self.sess.run([self.geo_reconstructed_l, self.spectra_l_predicted, self.total_loss],
-                                                feed_dict={self.geo_labeled: input_batch, self.spectrum_target: target_batch})
-
-
-            loss_list.append(loss)
-
-            counter += 1
-            if idx%1==0:
-                print(("Step: [%4d/%4d] time: %4.4f" % (
-                    idx, batch_idxs, time.time() - start_time)))
-                #df_param = pd.DataFrame(np.squeeze(input_batch), columns={'param1','param2','param3','param4','param5'}) 
-                df_pred = pd.DataFrame(np.squeeze(pred))
-                df_target = pd.DataFrame(np.squeeze(target_batch))
-                #df_geo_pred =  np.squeeze(geo_pred)
-
-                #df_param_pred = pd.concat([df_param, df_pred], axis=1, sort=False)
-                #df_param_target = pd.concat([df_param, df_target], axis=1, sort=False)
-                #df_param_param = pd.concat([df_param, df_geo_pred], axis=1, sort=False)
-                
-                df_param_target_all = pd.concat([df_param_target_all, df_target], axis=0, sort=False)
-                df_param_pred_all = pd.concat([df_param_pred_all, df_pred], axis=0, sort=False)
-
-
-            df_param_target_all.to_csv('./test/result_test_target.csv', index=False)
-            df_param_pred_all.to_csv('./test/result_test_prediction.csv', index=False)
-
-            #print(np.shape(geo_pred))
-            geo_pred = np.squeeze(geo_pred)
-            #print(geo_pred)
-            #cv2.imwrite('./test/reconstructed/test'+str(idx)+'.bmp',(geo_pred+1)*128)
+        for epoch in range(1):
             
-        print("loss")
-        print(np.mean(loss_list))
-        print("total time")
-        print(time.time() - start_time)
+            batch_idxs = len(self.test_label) // self.batch_size
 
+            #self.train_image, self.train_label = shuffle(self.train_image, self.train_label)
+            
+            for idx in range(1):
 
-    def test_reconstruction(self, args):
+                input_batch = self._load_batch(idx, self.test_image)
 
-        self.batch_size = 1
+                z_input = np.random.normal(0,1,[self.batch_size,128])
 
-        start_time = time.time()
-        init_op = tf.global_variables_initializer()
-        self.sess.run(init_op)
+                recon_img = self.sess.run([self.recon_image], feed_dict={self.z_input : z_input, self.real_input : input_batch})
 
-        if self.load(args.checkpoint_dir):
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-
-        counter = 0
-
-
-        if not os.path.exists(os.path.join(args.test_dir,'input')):
-            os.mkdir(os.path.join(args.test_dir,'input'))
-
-
-        batch_idxs = len(self.ds) // self.batch_size
-
-        #ds_1 = self.ds.sample(frac=1)
-        ds_1 = self.ds
-        #print(ds_1.iloc[:,4:][0:10].values.tolist())
-        
-        loss_list = []
-
-        for idx in range(0, batch_idxs):
-
-            input_batch, target_batch, filename_list = self._load_batch(ds_1, idx)
-
-            for j in range(5):
-                latent_vector = list(np.random.normal(0,3,5))
-                #for k in range(5):
-                #    latent_vector[k] = j*0.5 - 2.5
-                print(latent_vector)
-                latent_vector = np.expand_dims(latent_vector, 0)
-                geo_recon = self.sess.run([self.geo_reconstructed], 
-                                            feed_dict={self.latent_vector: latent_vector, self.spectrum_target: target_batch})
+                for j in range(len(recon_img[0])):
+                    temp_image = np.reshape(recon_img[0][j]*255, (28,28))
+                    temp_real = np.reshape(input_batch[j]*255, (28,28))
+                    cv2.imwrite('./test/'+str(j)+'_real.bmp', temp_real)
+                    cv2.imwrite('./test/'+str(j)+'_recon.bmp', temp_image)
+                counter += 1
 
 
             

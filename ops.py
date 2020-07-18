@@ -74,4 +74,4 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
             return tf.matmul(input_, matrix) + bias
 
 def softplus(x): #log(exp(x) + 1).
-    return tf.log(tf.exp(x)+1)
+    return tf.nn.softplus(x)#tf.log(tf.exp(x)+1)

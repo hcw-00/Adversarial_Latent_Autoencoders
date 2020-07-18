@@ -5,97 +5,61 @@ from utils import *
 
 
 
-def f_encoder(inputs, reuse=False):
+def f_encoder(inputs, reuse=False, name="f_encoder"):
 
-    with tf.variable_scope("prediction_network"):
-
-        if reuse:
-            tf.get_variable_scope().reuse_variables()
-        else:
-            assert tf.get_variable_scope().reuse is False
-
-        inputs = slim.flatten(inputs)
-        net_a = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
-
-        net_a = slim.fully_connected(net_a, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(net_b, 512, activation_fn=tf.nn.tanh)
-
-        spectrum_a = slim.fully_connected(net_a, 101, activation_fn=tf.nn.tanh)
-        spectrum_b = slim.fully_connected(net_b, 101, activation_fn=tf.nn.tanh)
-
-        spectra = tf.concat([spectrum_a, spectrum_b], axis=1)
-        spectra = tf.expand_dims(spectra, axis=2)
-        return spectra
-
-def generator(inputs, reuse=False):
-
-    with tf.variable_scope("prediction_network"):
+    with tf.variable_scope("f_encoder"):
 
         if reuse:
             tf.get_variable_scope().reuse_variables()
         else:
             assert tf.get_variable_scope().reuse is False
 
-        inputs = slim.flatten(inputs)
-        net_a = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
+        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
+        net = slim.fully_connected(net, 50, activation_fn=None, weights_initializer=tf.initializers.he_normal())
 
-        net_a = slim.fully_connected(net_a, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(net_b, 512, activation_fn=tf.nn.tanh)
+        return net
 
-        spectrum_a = slim.fully_connected(net_a, 101, activation_fn=tf.nn.tanh)
-        spectrum_b = slim.fully_connected(net_b, 101, activation_fn=tf.nn.tanh)
+def generator(inputs, eta, reuse=False, name="generator"):
 
-        spectra = tf.concat([spectrum_a, spectrum_b], axis=1)
-        spectra = tf.expand_dims(spectra, axis=2)
-        return spectra
-
-def e_encoder(inputs, reuse=False):
-
-    with tf.variable_scope("prediction_network"):
+    with tf.variable_scope("generator"):
 
         if reuse:
             tf.get_variable_scope().reuse_variables()
         else:
             assert tf.get_variable_scope().reuse is False
 
-        inputs = slim.flatten(inputs)
-        net_a = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
+        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
+        net = slim.fully_connected(net, 784, activation_fn=None, weights_initializer=tf.initializers.he_normal())
 
-        net_a = slim.fully_connected(net_a, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(net_b, 512, activation_fn=tf.nn.tanh)
+        return net
 
-        spectrum_a = slim.fully_connected(net_a, 101, activation_fn=tf.nn.tanh)
-        spectrum_b = slim.fully_connected(net_b, 101, activation_fn=tf.nn.tanh)
+def e_encoder(inputs, reuse=False, name="e_encoder"):
 
-        spectra = tf.concat([spectrum_a, spectrum_b], axis=1)
-        spectra = tf.expand_dims(spectra, axis=2)
-        return spectra
-
-def discriminator(inputs, reuse=False):
-
-    with tf.variable_scope("prediction_network"):
+    with tf.variable_scope("e_encoder"):
 
         if reuse:
             tf.get_variable_scope().reuse_variables()
         else:
             assert tf.get_variable_scope().reuse is False
 
-        inputs = slim.flatten(inputs)
-        net_a = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(inputs, 512, activation_fn=tf.nn.tanh)
+        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
+        net = slim.fully_connected(net, 50, activation_fn=None, weights_initializer=tf.initializers.he_normal())
 
-        net_a = slim.fully_connected(net_a, 512, activation_fn=tf.nn.tanh)
-        net_b = slim.fully_connected(net_b, 512, activation_fn=tf.nn.tanh)
+        return net
 
-        spectrum_a = slim.fully_connected(net_a, 101, activation_fn=tf.nn.tanh)
-        spectrum_b = slim.fully_connected(net_b, 101, activation_fn=tf.nn.tanh)
+def discriminator(inputs, reuse=False, name="discriminator"):
 
-        spectra = tf.concat([spectrum_a, spectrum_b], axis=1)
-        spectra = tf.expand_dims(spectra, axis=2)
-        return spectra
+    with tf.variable_scope("discriminator"):
+
+        if reuse:
+            tf.get_variable_scope().reuse_variables()
+        else:
+            assert tf.get_variable_scope().reuse is False
+
+        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
+        net = slim.fully_connected(net, 1, activation_fn=None, weights_initializer=tf.initializers.he_normal())
+
+        return net
 
 
 
