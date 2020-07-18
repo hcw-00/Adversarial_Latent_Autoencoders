@@ -1,6 +1,6 @@
 # Adversarial_Latent_Autoencoders
-Simple implementation of "Adversarial Latent Autoencoders" (tf1)  
-original paper : https://arxiv.org/abs/2004.04467  
+Simple tensorflow(v1.x) implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al.  
+Original paper : https://arxiv.org/abs/2004.04467  
 
 # usage
 ~~~
