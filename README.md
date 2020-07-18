@@ -4,7 +4,7 @@ Original paper : https://arxiv.org/abs/2004.04467
 
 # Usage
 ~~~
-python main.py --phase train/test --epoch epoch
+python main.py --phase train/test --epoch epoch --lr 0.0002
 ~~~
 # Results
 ## Reconstructed
