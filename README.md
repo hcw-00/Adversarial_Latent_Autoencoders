@@ -1,8 +1,8 @@
 # Adversarial Latent Autoencoders(ALAE, unofficial)
-Simple tensorflow(v1.x) implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al.  
+Simple MLP implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al.  (tensorflow v1.x)
 Original paper : https://arxiv.org/abs/2004.04467  
 
-# usage
+# Usage
 ~~~
 python main.py --phase train/test --epoch epoch
 ~~~
