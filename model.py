@@ -5,26 +5,20 @@ from glob import glob
 import tensorflow as tf
 from dataset.mnist import load_mnist
 import numpy as np
-import pandas as pd
-#from collections import namedtuple
 from sklearn.utils import shuffle
 from module import *
 from utils import *
 import utils
-
 import cv2
 
 #TODO : add noise input eta
 
-class vae(object):
+class alae_mlp(object):
     
     def __init__(self, sess, args):
         self.sess = sess
         self.batch_size = args.batch_size
-        #self.image_size = args.fine_size
-        self.L1_lambda = args.L1_lambda
-        self.dataset_dir = args.dataset_dir
-        self.alpha = args.alpha
+        self.ckpt_dir = args.ckpt_dir
         self.gamma = 10
         self.f_encoder = f_encoder
         self.generator = generator
@@ -119,11 +113,6 @@ class vae(object):
         counter = 1
         start_time = time.time()
 
-        if args.continue_train:
-            if self.load(args.checkpoint_dir): 
-                print(" [*] Load SUCCESS")
-            else:
-                print(" [!] Load failed...")
 
         for epoch in range(args.epoch):
             
@@ -148,8 +137,8 @@ class vae(object):
 
                 counter += 1
                 if idx%20==0:
-                    print(("Epoch: [%2d] [%4d/%4d] time: %4.4f ed adv loss: %4.4f fg adv loss: %4.4f eg loss: %4.4f" % (
-                        epoch, idx, batch_idxs, time.time() - start_time, ed_loss, fg_loss, eg_loss)))
+                    print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f | G adv loss: %4.4f | latent l2 loss: %4.4f | time: %4.4f " % (
+                        epoch, idx, batch_idxs, ed_loss, fg_loss, eg_loss, time.time() - start_time)))
 
                 if idx == batch_idxs-1:
                     #self.save(args.checkpoint_dir, counter)
@@ -163,7 +152,7 @@ class vae(object):
 
     def save(self, checkpoint_dir, step):
         model_name = "dnn.model"
-        model_dir = "%s" % (self.dataset_dir)
+        model_dir = "%s" % (self.ckpt_dir)
         checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
 
         if not os.path.exists(checkpoint_dir):
@@ -176,7 +165,7 @@ class vae(object):
     def load(self, checkpoint_dir):
         print(" [*] Reading checkpoint...")
 
-        model_dir = "%s" % (self.dataset_dir)
+        model_dir = "%s" % (self.ckpt_dir)
         checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
 
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
@@ -184,8 +173,8 @@ class vae(object):
             print(ckpt)
             ckpt_paths = ckpt.all_model_checkpoint_paths    #hcw
             print(ckpt_paths)
-            #ckpt_name = os.path.basename(ckpt_paths[-1])    #hcw # default [-1]
-            temp_ckpt = 'dnn.model-23401'
+            ckpt_name = os.path.basename(ckpt_paths[-1])    #hcw # default [-1]
+            #temp_ckpt = 'dnn.model-23401'
             ckpt_name = os.path.basename(temp_ckpt)
             self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
             return True
