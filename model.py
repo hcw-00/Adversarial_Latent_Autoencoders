@@ -6,7 +6,7 @@ import tensorflow as tf
 from dataset.mnist import load_mnist
 import numpy as np
 import pandas as pd
-from collections import namedtuple
+#from collections import namedtuple
 from sklearn.utils import shuffle
 from module import *
 from utils import *
