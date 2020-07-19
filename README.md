@@ -18,4 +18,5 @@ python main.py --phase train/test --epoch epoch --lr 0.0002
 <img src="https://user-images.githubusercontent.com/39647373/87861745-0c73c080-c984-11ea-998c-8404497a5825.jpg"  width="100" height="100"></img>
 
 ## Latent interpolation
-<img src="https://user-images.githubusercontent.com/39647373/87862932-62e6fc00-c990-11ea-84e2-b785cd20f8c5.jpg"  width="700" height="100"></img>
+<!-- <img src="https://user-images.githubusercontent.com/39647373/87862932-62e6fc00-c990-11ea-84e2-b785cd20f8c5.jpg"  width="700" height="100"></img> -->
+
