@@ -1,5 +1,5 @@
-# Adversarial Latent Autoencoders (unofficial)
-Simple MLP implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al. - 2020 (tensorflow v1.x)  
+# Adversarial Latent Autoencoders - cvpr2020 (unofficial)
+Simple MLP implementation of "Adversarial Latent Autoencoders" - Pidhorskyi et. al. (2020) (tensorflow v1.x)  
 Original paper : https://arxiv.org/abs/2004.04467  
 
 # Usage
